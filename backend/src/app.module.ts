@@ -34,6 +34,7 @@ import { RedisController } from './controllers/redis.controller';
 
 import { Review } from './entities/review.entity';
 import { Restaurant } from './entities/restaurant.entity';
+import { RestaurantService } from './services/restaurant.service';
 
 // ✅ 인증 모듈 추가 (명세: /auth/signup, /auth/login, /auth/me, /auth/logout)
 import { AuthModule } from './auth/auth.module';
@@ -119,6 +120,7 @@ import { AuthModule } from './auth/auth.module';
     GptService,
     KeywordExtractionService,
     KeywordMapService,
+    RestaurantService,
   ],
 
   exports: [KeywordMapService],
