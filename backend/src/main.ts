@@ -1,14 +1,16 @@
-// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
+import * as cookieParser from 'cookie-parser'; // ✅ 수정: default import → namespace import
 
 function parseOrigins(): (string | RegExp)[] {
   const raw = process.env.CORS_ORIGIN?.trim();
-  if (!raw) return ['http://localhost:3000']; // 기본값
-  return raw.split(',').map(s => s.trim());
+  if (!raw) {
+    // 기본값: 프론트(3000) + Swagger(3001) 둘 다 허용
+    return ['http://localhost:3000', 'http://localhost:3001'];
+  }
+  return raw.split(',').map((s) => s.trim());
 }
 
 async function bootstrap() {
@@ -27,16 +29,26 @@ async function bootstrap() {
     }),
   );
 
-  // 3) CORS 설정 (credentials=true → origin 화이트리스트 필수)
+  // 3) CORS 설정
   const origins = parseOrigins();
   app.enableCors({
     origin: (origin, callback) => {
-      // origin이 undefined인 경우(예: curl, Postman) 허용
-      if (!origin) return callback(null, true);
-      if (origins.includes(origin)) return callback(null, true);
-      // 정규식 Origin도 지원
-      const ok = origins.some(o => o instanceof RegExp && o.test(origin));
-      return ok ? callback(null, true) : callback(new Error(`CORS blocked: ${origin}`));
+      if (!origin) return callback(null, true); // curl/Postman 허용
+
+      const allowedOrigins = [
+        'http://localhost:3000', // 프론트
+        'http://localhost:3001', // Swagger / API 직접 호출
+        ...origins,
+      ];
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      const ok = origins.some((o) => o instanceof RegExp && o.test(origin));
+      return ok
+        ? callback(null, true)
+        : callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -44,12 +56,11 @@ async function bootstrap() {
     exposedHeaders: ['Set-Cookie'],
   });
 
-  // 4) Swagger 문서 (쿠키 인증 표시)
+  // 4) Swagger 문서
   const swaggerConfig = new DocumentBuilder()
     .setTitle('MeokkitList API')
     .setDescription('API documentation for MeokkitList project')
     .setVersion('1.0')
-    // 쿠키 인증을 문서에 표시(실제 Swagger Try-Out에서 자동전송은 안 되지만 가이드용)
     .addCookieAuth('token', {
       type: 'apiKey',
       in: 'cookie',
@@ -57,16 +68,19 @@ async function bootstrap() {
       description: 'HttpOnly JWT token cookie (set by /auth/login)',
     })
     .build();
+
   const swaggerDoc = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api-docs', app, swaggerDoc);
 
-  // 5) 서버 시작
-  const PORT = parseInt(process.env.APP_PORT ?? '3001', 10);
-  await app.listen(PORT);
+  // 5) 서버 시작 (PORT 환경변수 우선)
+  const PORT = parseInt(process.env.PORT ?? process.env.APP_PORT ?? '3001', 10);
+  await app.listen(PORT, '0.0.0.0');
 
   logger.log(`🚀 Server is running on http://localhost:${PORT}`);
   logger.log(`📘 Swagger docs at http://localhost:${PORT}/api-docs`);
-  logger.log(`🔐 CORS origins: ${Array.isArray(origins) ? origins.join(', ') : origins}`);
+  logger.log(
+    `🔐 CORS origins: ${Array.isArray(origins) ? origins.join(', ') : origins}`,
+  );
 }
 
 bootstrap();

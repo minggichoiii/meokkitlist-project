@@ -16,6 +16,7 @@
     "@types/react-dom": "^19.1.6",
     "axios": "^1.10.0",
     "cache-manager": "^7.1.1",
+    "csv-parse": "^6.1.0",
     "ioredis": "^5.7.0",
     "openai": "^5.15.0",
     "react": "^19.1.0",
@@ -48,5 +49,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/csv-parse": "^1.1.12",
+    "@types/multer": "^2.0.0"
   }
 }

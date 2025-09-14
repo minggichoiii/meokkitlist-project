@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateRestaurantDto {
   @IsString()
@@ -8,26 +9,28 @@ export class CreateRestaurantDto {
   address: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  lat?: number;
+  lat: number | null;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  lon?: number;
+  lon: number | null;
 
   @IsOptional()
   @IsString()
-  preview?: string;
+  preview?: string | null;
 
   @IsOptional()
-  @IsNumber()
   review_count?: number;
 
   @IsOptional()
-  @IsNumber()
   total_score?: number;
 
   @IsOptional()
-  @IsNumber()
   naver_score?: number;
+
+  @IsOptional()
+  keywords?: string[] | null;
 }

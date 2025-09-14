@@ -9,14 +9,26 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { RestaurantService } from '../services/restaurant.service';
 
 // 업로드 디렉토리 지정
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'csv');
 
 function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (e) {
+    throw new Error(`업로드 디렉토리 생성 실패: ${(e as Error).message}`);
+  }
 }
 
 @ApiTags('Restaurant') // Swagger 그룹 이름
@@ -43,6 +55,7 @@ export class RestaurantController {
       fileFilter: (_req, file, cb) => {
         const ok =
           file.mimetype === 'text/csv' ||
+          file.mimetype === 'application/vnd.ms-excel' || // ✅ 추가
           file.originalname.toLowerCase().endsWith('.csv');
         cb(
           ok ? null : new BadRequestException('CSV 파일만 업로드 가능합니다.'),
@@ -52,8 +65,10 @@ export class RestaurantController {
       limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     }),
   )
+  @ApiOperation({ summary: 'CSV 업로드 (레스토랑 배치 저장)' })
   @ApiConsumes('multipart/form-data') // Swagger에 파일 업로드 표시
   @ApiBody({
+    description: '레스토랑 CSV 업로드 (헤더: name, address, lat, lon, preview)',
     schema: {
       type: 'object',
       properties: {
@@ -61,6 +76,15 @@ export class RestaurantController {
           type: 'string',
           format: 'binary',
         },
+      },
+    },
+  })
+  @ApiOkResponse({
+    description: 'CSV 업로드 결과',
+    schema: {
+      type: 'object',
+      properties: {
+        inserted: { type: 'number', example: 5 },
       },
     },
   })

@@ -11,32 +11,43 @@ import * as redisStore from 'cache-manager-ioredis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
+// Kakao
 import { KakaoController } from './kakao/kakao.controller';
 import { KakaoService } from './kakao/kakao.service';
 
+// Sentiment
 import { SentimentController } from './controllers/sentiment.controller';
 import { SentimentService } from './services/sentiment.service';
 
+// Review
 import { ReviewController } from './controllers/review.controller';
 import { ReviewService } from './services/review.service';
 
+// Search
 import { SearchController } from './controllers/search.controller';
 import { SearchService } from './services/search.service';
 
+// GPT
 import { GptController } from './gpt/gpt.controller';
 import { GptService } from './gpt/gpt.service';
 
+// Keyword
 import { KeywordController } from './controllers/keyword.controller';
 import { KeywordExtractionService } from './services/keyword-extraction.service';
 import { KeywordMapService } from './services/keyword-map.service';
 
+// Redis
 import { RedisController } from './controllers/redis.controller';
 
-import { Review } from './entities/review.entity';
-import { Restaurant } from './entities/restaurant.entity';
+// Restaurant
+import { RestaurantController } from './controllers/restaurant.controller';
 import { RestaurantService } from './services/restaurant.service';
 
-// ✅ 인증 모듈 추가 (명세: /auth/signup, /auth/login, /auth/me, /auth/logout)
+// Entities
+import { Review } from './entities/review.entity';
+import { Restaurant } from './entities/restaurant.entity';
+
+// ✅ 인증 모듈 추가
 import { AuthModule } from './auth/auth.module';
 
 @Module({
@@ -51,11 +62,9 @@ import { AuthModule } from './auth/auth.module';
 
     // 3) DB 연결 (env 기반)
     TypeOrmModule.forRoot({
-      // .env 예시: DB_TYPE=sqlite, DB_PATH=./dev.sqlite
       type: (process.env.DB_TYPE as any) || 'sqlite',
       database: process.env.DB_PATH || 'meokkitlist.sqlite',
       entities: [Review, Restaurant],
-      // 개발에서는 true, 운영에서는 false 권장
       synchronize:
         process.env.NODE_ENV === 'development' ||
         process.env.NODE_ENV === 'dev' ||
@@ -72,7 +81,6 @@ import { AuthModule } from './auth/auth.module';
     CacheModule.registerAsync({
       isGlobal: true,
       useFactory: async () => ({
-        // nest v10 + cache-manager-ioredis 조합에서는 any 캐스팅이 안전
         store: redisStore as any,
         host: process.env.REDIS_HOST || '127.0.0.1',
         port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
@@ -89,7 +97,6 @@ import { AuthModule } from './auth/auth.module';
           host: process.env.REDIS_HOST || '127.0.0.1',
           port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
           password: process.env.REDIS_PASSWORD || undefined,
-          // ioredis in Nest 추천 설정
           maxRetriesPerRequest: null,
           enableReadyCheck: false,
         },
@@ -109,6 +116,7 @@ import { AuthModule } from './auth/auth.module';
     GptController,
     KeywordController,
     RedisController,
+    RestaurantController, // ✅ 추가
   ],
 
   providers: [

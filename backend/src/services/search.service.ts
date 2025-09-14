@@ -92,64 +92,67 @@ export class SearchService implements OnModuleInit {
     sentimentScore: number;
   }): number {
     return (
-    matchScore * SCORE_WEIGHTS.matchScore +
-    totalScore * SCORE_WEIGHTS.totalScore +
-    reviewCount * SCORE_WEIGHTS.reviewCount +
-    sentimentScore * SCORE_WEIGHTS.sentimentScore
-  );
+      matchScore * SCORE_WEIGHTS.matchScore +
+      totalScore * SCORE_WEIGHTS.totalScore +
+      reviewCount * SCORE_WEIGHTS.reviewCount +
+      sentimentScore * SCORE_WEIGHTS.sentimentScore
+    );
   }
 
   async searchByKeyword(dto: SearchKeywordDto & { keywords?: string[] }) {
-  const { keyword, userPosition, range } = dto;
+    const { keyword, userPosition, range } = dto;
 
-  let extractedKeywords: string[] = [];
+    let extractedKeywords: string[] = [];
 
-  if (dto.keywords && dto.keywords.length > 0) {
-    this.logger.log(`📌 키워드 배열 입력 받음: ${JSON.stringify(dto.keywords)}`);
+    // 1) keywords 배열이 직접 들어온 경우
+    if (dto.keywords && dto.keywords.length > 0) {
+      this.logger.log(`📌 키워드 배열 입력 받음: ${JSON.stringify(dto.keywords)}`);
 
-    const knownKeywords: string[] = [];
-    const unknownKeywords: string[] = [];
+      const knownKeywords: string[] = [];
+      const unknownKeywords: string[] = [];
 
-    for (const k of dto.keywords) {
-      if (this.keywordMapService.getRestaurantIdsByKeyword(k).length > 0) {
-        knownKeywords.push(k);
-      } else {
-        unknownKeywords.push(k);
+      for (const k of dto.keywords) {
+        if (this.keywordMapService.getRestaurantIdsByKeyword(k).length > 0) {
+          knownKeywords.push(k);
+        } else {
+          unknownKeywords.push(k);
+        }
       }
+
+      let expandedKeywords: string[] = [];
+
+      if (unknownKeywords.length > 0) {
+        this.logger.log(`🤖 GPT 호출 필요: ${JSON.stringify(unknownKeywords)}`);
+        const gptResults = await this.gptService.extractKeywords(unknownKeywords.join(', '));
+
+        // GPT 결과 중 Map에 있는 것만 필터
+        expandedKeywords = gptResults.filter(
+          (k) => this.keywordMapService.getRestaurantIdsByKeyword(k).length > 0,
+        );
+
+        this.logger.log(`🔁 GPT 유사어 중 사용 가능한 키워드: ${JSON.stringify(expandedKeywords)}`);
+      }
+
+      extractedKeywords = [...knownKeywords, ...expandedKeywords];
+
+    // 2) keyword 단일 문자열이 들어온 경우
+    } else if (keyword) {
+      extractedKeywords = await this.gptService.extractKeywords(keyword);
+      this.logger.log(`🤖 GPT 문장 기반 키워드 추출: ${JSON.stringify(extractedKeywords)}`);
     }
 
-    let expandedKeywords: string[] = [];
-
-    if (unknownKeywords.length > 0) {
-      this.logger.log(`🤖 GPT 호출 필요: ${JSON.stringify(unknownKeywords)}`);
-      const gptResults = await this.gptService.extractKeywords(unknownKeywords.join(', '));
-
-      // GPT 결과 중 Map에 있는 것만 필터
-      expandedKeywords = gptResults.filter(
-        (k) => this.keywordMapService.getRestaurantIdsByKeyword(k).length > 0,
-      );
-
-      this.logger.log(`🔁 GPT 유사어 중 사용 가능한 키워드: ${JSON.stringify(expandedKeywords)}`);
+    if (!extractedKeywords || extractedKeywords.length === 0) {
+      return {
+        meta: {
+          query: { keyword, userPosition, range },
+          resultCount: 0,
+        },
+        data: [],
+        message: '추천에 사용할 키워드를 찾을 수 없었어요.',
+      };
     }
 
-    extractedKeywords = [...knownKeywords, ...expandedKeywords];
-
-  } else if (keyword) {
-    extractedKeywords = await this.gptService.extractKeywords(keyword);
-    this.logger.log(`🤖 GPT 문장 기반 키워드 추출: ${JSON.stringify(extractedKeywords)}`);
-  }
-
-  if (!extractedKeywords || extractedKeywords.length === 0) {
-    return {
-      meta: {
-        query: { keyword, userPosition, range },
-        resultCount: 0,
-      },
-      data: [],
-      message: '추천에 사용할 키워드를 찾을 수 없었어요.',
-    };
-  }
-
+    // 🔎 KeywordMap 기반 검색
     const restaurantIdSet = new Set<number>();
     for (const kw of extractedKeywords) {
       const ids = this.keywordMapService.getRestaurantIdsByKeyword(kw);
@@ -166,10 +169,14 @@ export class SearchService implements OnModuleInit {
       });
     }
 
+    // 🔎 DB fallback 검색 (keywords + name + address + preview)
     if (candidates.length === 0 && keyword) {
       candidates = await this.restaurantRepo
         .createQueryBuilder('r')
         .where('r.keywords LIKE :kw', { kw: `%${keyword}%` })
+        .orWhere('r.name LIKE :kw', { kw: `%${keyword}%` })
+        .orWhere('r.address LIKE :kw', { kw: `%${keyword}%` })
+        .orWhere('r.preview LIKE :kw', { kw: `%${keyword}%` })
         .getMany();
     }
 
@@ -239,12 +246,14 @@ export class SearchService implements OnModuleInit {
       data: top.map((e, i) => {
         const r = e.raw as Restaurant;
         return {
+          id: r.id, // 🔥 팀원 요구사항 반영: id 반환
           rank: i + 1,
-          marketName: (r as any).name,
-          marketAddress: (r as any).address,
+          marketName: r.name,
+          marketAddress: r.address,
+          preview: r.preview, // 🔥 팀원 요구사항 반영: preview 반환
           marketUrl:
             r.lat && r.lon
-              ? `https://map.kakao.com/link/to/${encodeURIComponent((r as any).name)},${r.lat},${r.lon}`
+              ? `https://map.kakao.com/link/to/${encodeURIComponent(r.name)},${r.lat},${r.lon}`
               : null,
           relatedKeyword: this.safeParseKeywords((r as any).keywords),
           keywordsMatched: e.keywordsMatched,
@@ -255,8 +264,8 @@ export class SearchService implements OnModuleInit {
           finalScore: e.finalScore,
           naverScore: (r as any).naver_score ?? null,
           coordinates: {
-            lat: (r as any).lat ?? null,
-            lon: (r as any).lon ?? null,
+            lat: r.lat ?? null,
+            lon: r.lon ?? null,
           },
           distanceKm: e.distanceKm,
         };
